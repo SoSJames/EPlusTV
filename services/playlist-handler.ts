@@ -124,6 +124,12 @@ export class PlaylistHandler {
 
   public async parseManifest(manifestUrl: string, headers: IHeaders): Promise<void> {
     try {
+      let key_auth;
+      if ('x-key-auth' in headers) {
+        key_auth = headers['x-key-auth'];
+        delete headers['x-key-auth'];
+      }
+      
       const {
         data: manifest,
         request,
@@ -291,6 +297,33 @@ export class PlaylistHandler {
         }
         updatedManifest = updatedManifest.replace(variant.uri, `${this.baseProxyUrl}${chunklistName}.m3u8`);
       });
+      
+      for (const key of playlist.sessionKeyList) {
+        const fullKeyUrl = isRelativeUrl(key.uri)
+          ? usesHostRoot(key.uri)
+            ? convertHostUrl(key.uri, realManifestUrl)
+            : cleanUrl(`${realManifestUrl}${key.uri}`)
+          : key.uri;
+        
+        let key_headers = {
+          'Accept-Encoding': 'identity',
+          authorization: key_auth,
+          'User-Agent': userAgent,
+          ...headers,
+        }
+        if (key_auth) {
+          key_headers = {
+            authorization: key_auth,
+            ...key_headers,
+          }
+        }
+        
+        const {data: keyValue} = await axios.get<string>(fullKeyUrl, {
+          headers: key_headers,
+        });
+
+        updatedManifest = updatedManifest.replace(key.uri, keyValue);
+      }
 
       this.playlist = updatedManifest;
     } catch (e) {
