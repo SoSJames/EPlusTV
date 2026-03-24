@@ -738,7 +738,8 @@ public getStationMap = async (): Promise<typeof this.stationMap> => {
         playURL,
         {
           'Accept-Encoding': 'gzip, deflate, br, zstd',
-          'x-key-auth': this.adobe_auth.accessToken,
+          Origin: 'https://www.fox.com',
+          Referer: 'https://www.fox.com/',
           'User-Agent': androidFoxOneUserAgent,
         },
       ];

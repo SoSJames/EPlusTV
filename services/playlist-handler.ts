@@ -124,10 +124,11 @@ export class PlaylistHandler {
 
   public async parseManifest(manifestUrl: string, headers: IHeaders): Promise<void> {
     try {
-      let key_auth;
-      if ('x-key-auth' in headers) {
-        key_auth = headers['x-key-auth'];
-        delete headers['x-key-auth'];
+      if (!('Accept-Encoding' in headers)) {
+        headers['Accept-Encoding'] = 'identity';
+      }
+      if (!('User-Agent' in headers)) {
+        headers['User-Agent'] = userAgent;
       }
       
       const {
@@ -135,11 +136,7 @@ export class PlaylistHandler {
         request,
         headers: resHeaders,
       } = await axios.get<string>(manifestUrl, {
-        headers: {
-          'Accept-Encoding': 'identity',
-          'User-Agent': userAgent,
-          ...headers,
-        },
+        headers: headers,
       });
 
       const processedManifest = this.network === 'foxone' ? handleDateranges(manifest, this.network) : manifest;
@@ -305,24 +302,15 @@ export class PlaylistHandler {
             : cleanUrl(`${realManifestUrl}${key.uri}`)
           : key.uri;
         
-        let key_headers = {
-          'Accept-Encoding': 'identity',
-          authorization: key_auth,
-          'User-Agent': userAgent,
-          ...headers,
-        }
-        if (key_auth) {
-          key_headers = {
-            authorization: key_auth,
-            ...key_headers,
-          }
-        }
-        
-        const {data: keyValue} = await axios.get<string>(fullKeyUrl, {
-          headers: key_headers,
+        const response = await axios.get<string>(fullKeyUrl, {
+          headers: headers,
+          responseType: 'arraybuffer',
         });
+        
+        const buffer = Buffer.from(response.data);
+        const base64String = buffer.toString('base64');
 
-        updatedManifest = updatedManifest.replace(key.uri, keyValue);
+        updatedManifest = updatedManifest.replace(key.uri, base64String);
       }
 
       this.playlist = updatedManifest;
@@ -352,12 +340,15 @@ export class PlaylistHandler {
 
       const headers = await this.getHeaders();
 
+      if (!('Accept-Encoding' in headers)) {
+        headers['Accept-Encoding'] = 'identity';
+      }
+      if (!('User-Agent' in headers)) {
+        headers['User-Agent'] = userAgent;
+      }
+      
       const {data: chunkList, request} = await axios.get<string>(url, {
-        headers: {
-          'Accept-Encoding': 'identity',
-          'User-Agent': userAgent,
-          ...headers,
-        },
+        headers: headers,
       });
 
       const processedChunklist = this.network === 'foxone' ? handleDateranges(chunkList, this.network) : chunkList;
