@@ -3,7 +3,6 @@ import _ from 'lodash';
 import jwt_decode from 'jwt-decode';
 import moment from 'moment';
 import CryptoJS from 'crypto-js';
-
 import {getRandomUUID, normalTimeRange} from './shared-helpers';
 import {db} from './database';
 import {ClassTypeWithoutMethods, IEntry, IProvider, TChannelPlaybackInfo} from './shared-interfaces';
@@ -39,7 +38,6 @@ const API_KEY = [
   '7',
   '6',
 ].join('');
-
 const CLIENT_SECRET = [
   'd',
   '5',
@@ -78,7 +76,6 @@ const CLIENT_SECRET = [
   '0',
   '9',
 ].join('');
-
 const BASE_API_URL = ['https://', 'api.gothamsports.com', '/proxy'].join('');
 const BASE_ADOBE_URL = ['https://', 'api.auth', '.adobe.com', '/api/v1'].join('');
 
@@ -121,10 +118,12 @@ const extractSidFromJWT = (accessToken: string) => {
 };
 
 // Function to replace characters for Base64 URL encoding
-const base64UrlEncode = (text: string) => text.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+const base64UrlEncode = (text: string) =>
+  text.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
 // Function to convert a string to Base64 URL format
-const utf8ToBase64Url = (text: string) => base64UrlEncode(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(text)));
+const utf8ToBase64Url = (text: string) =>
+  base64UrlEncode(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(text)));
 
 const JWTEncode = (header, payload, secretKey) => {
   // Create an array to hold the JWT segments
@@ -143,7 +142,6 @@ const JWTEncode = (header, payload, secretKey) => {
 
 const parseAirings = async (events: any[]) => {
   const useLinear = await usesLinear();
-
   const [now, inTwoDays] = normalTimeRange();
 
   for (const event of events) {
@@ -219,7 +217,6 @@ class GothamHandler {
 
     // Load tokens from local file and make sure they are valid
     await this.load();
-
     await this.gothamInit();
   };
 
@@ -259,13 +256,13 @@ class GothamHandler {
 
     if (this.adobe_token_expires && moment().isAfter(this.adobe_token_expires)) {
       console.log('Refreshing Gotham Adobe token');
+
       const didUpdate = await this.authenticateRegCode();
 
       if (!didUpdate) {
         this.adobe_token = undefined;
         this.adobe_token_expires = undefined;
         this.save();
-
         console.log('Gotham needs to reauthenticate with your TV Provider');
       }
     }
@@ -281,9 +278,7 @@ class GothamHandler {
     console.log('Looking for Gotham events...');
 
     const useLinear = await usesLinear();
-
     const [now, end] = normalTimeRange();
-
     const entries: any[] = [];
 
     try {
@@ -292,8 +287,10 @@ class GothamHandler {
           for (const channel of Object.values(MSG_LINEAR[this.dma_id])) {
             if (
               !channel ||
-              _.intersection(this.entitlement_access, channel.id === 'YES' ? YES_PERMISSIONS : MSG_PERMISSIONS)
-                .length === 0
+              _.intersection(
+                this.entitlement_access,
+                channel.id === 'YES' ? YES_PERMISSIONS : MSG_PERMISSIONS,
+              ).length === 0
             ) {
               continue;
             }
@@ -320,7 +317,7 @@ class GothamHandler {
               },
             });
 
-            if ( !data.data ) {
+            if (!data.data) {
               continue;
             }
 
@@ -388,7 +385,15 @@ class GothamHandler {
 
           entries.push({
             artwork: `https://image-resizer-cloud-cdn.api.gamecms.quickplay.com/image/${airing.cid}/0-16x9.png?width=400`,
-            categories: ['Gotham', 'HD', 'Sports', airing.net || 'MSG', airing.aw_tm, airing.hm_tm, airing.spt_lg],
+            categories: [
+              'Gotham',
+              'HD',
+              'Sports',
+              airing.net || 'MSG',
+              airing.aw_tm,
+              airing.hm_tm,
+              airing.spt_lg,
+            ],
             contentId: `${airing.id}----${airing.cid}`,
             end: airing.ev_ed_dt,
             network: `${airing.pn}`.toUpperCase(),
@@ -409,9 +414,7 @@ class GothamHandler {
   public getEventData = async (eventId: string): Promise<TChannelPlaybackInfo> => {
     try {
       const [, channelId] = eventId.split('----');
-
       const event = await db.entries.findOneAsync<IEntry>({id: eventId});
-
       const network = event.network === 'YES' ? 'YESN' : 'MSGGO';
 
       const authToken = await this.getPlaybackToken();
@@ -426,38 +429,62 @@ class GothamHandler {
 
       const authUrl = [BASE_API_URL, '/media/content/authorize'].join('');
 
-      const {data} = await axios.post(
-        `${authUrl}`,
-        {
-          catalogType: 'channel',
-          contentId: channelId,
-          contentTypeId: 'live',
-          delivery: 'streaming',
-          deviceId: this.device_id,
-          deviceName: 'web',
-          drm: 'fairplay',
-          mediaFormat: 'hls',
-          playbackMode: 'live',
-          urlParameters: {},
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'content-type': 'application/json',
-            'gg-rsn-id': this.appConfig.RSNid,
-            'user-agent': okHttpUserAgent,
-            ...(adobeMediaToken && {
-              'x-adobe-authorization': adobeMediaToken,
-            }),
-            'x-authorization': this.entitlement_token,
-            'x-client-id': 'game-gotham-androidtv',
-            'x-device-id': deviceIdToken,
+      const doAuthorize = async () => {
+        const {data} = await axios.post(
+          `${authUrl}`,
+          {
+            catalogType: 'channel',
+            contentId: channelId,
+            contentTypeId: 'live',
+            delivery: 'streaming',
+            deviceId: this.device_id,
+            deviceName: 'web',
+            drm: 'fairplay',
+            mediaFormat: 'hls',
+            playbackMode: 'live',
+            urlParameters: {},
           },
-        },
-      );
+          {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              'content-type': 'application/json',
+              'gg-rsn-id': this.appConfig.RSNid,
+              'user-agent': okHttpUserAgent,
+              ...(adobeMediaToken && {
+                'x-adobe-authorization': adobeMediaToken,
+              }),
+              'x-authorization': this.entitlement_token,
+              'x-client-id': 'game-gotham-androidtv',
+              'x-device-id': deviceIdToken,
+            },
+          },
+        );
+
+        return data;
+      };
+
+      let data;
+
+      try {
+        data = await doAuthorize();
+      } catch (e: any) {
+        const status = e?.response?.status;
+
+        if (status === 401) {
+          console.warn('[Gotham] authorize 401 — refreshing entitlements and retrying…');
+          await this.refreshGothamSession();
+          data = await doAuthorize();
+        } else {
+          throw e;
+        }
+      }
 
       if (!data) {
         throw new Error('Could not get stream data. Event might be upcoming, ended, or in blackout...');
+      }
+
+      if (!data.data?.contentUrl) {
+        throw new Error('Gotham authorize response missing contentUrl');
       }
 
       return [data.data.contentUrl, {}];
@@ -470,7 +497,6 @@ class GothamHandler {
   private getPlaybackToken = async (): Promise<string> => {
     try {
       const url = [BASE_API_URL, '/oauth2/token'].join('');
-
       const params = new URLSearchParams({
         audience: 'edge-service',
         client_id: 'android-ui-app',
@@ -486,6 +512,10 @@ class GothamHandler {
           'user-agent': okHttpUserAgent,
         },
       });
+
+      if (!data?.access_token) {
+        throw new Error('Missing playback access_token');
+      }
 
       return data.access_token;
     } catch (e) {
@@ -522,7 +552,6 @@ class GothamHandler {
 
     try {
       const url = ['https://', 'api.auth.adobe.com', '/o/client/token'].join('');
-
       const params = new URLSearchParams({
         client_id,
         client_secret,
@@ -604,7 +633,6 @@ class GothamHandler {
 
   public login = async (username: string, password: string): Promise<boolean> => {
     this.device_id = getRandomUUID();
-
     await this.gothamInit();
 
     try {
@@ -685,12 +713,19 @@ class GothamHandler {
     }
   };
 
+  private refreshGothamSession = async (): Promise<void> => {
+    console.warn('[Gotham] Refreshing Gotham session (auth + entitlements)…');
+
+    await this.getNewTokens();
+    await this.getEntitlements();
+  };
+
   private getEntitlements = async (): Promise<IEntitlements> => {
     if (!this.auth_token) {
       return;
     }
 
-    try {
+    const doRequest = async () => {
       const {data} = await axios.post<{GetEntitlementsResponseMessage: IEntitlements}>(
         `${BASE_API_URL}/getEntitlements`,
         {
@@ -708,13 +743,32 @@ class GothamHandler {
         },
       );
 
+      return data;
+    };
+
+    try {
+      let data;
+
+      try {
+        data = await doRequest();
+      } catch (e: any) {
+        const status = e?.response?.status;
+
+        if (status === 401) {
+          console.warn('[Gotham] getEntitlements 401 — refreshing session and retrying…');
+          await this.refreshGothamSession();
+          data = await doRequest();
+        } else {
+          throw e;
+        }
+      }
+
       if (data?.GetEntitlementsResponseMessage?.message !== 'SUCCESS') {
         throw new Error('Could not get entitlements for Gotham');
       }
 
       this.entitlement_token = data.GetEntitlementsResponseMessage.ovatToken;
       this.dma_id = data.GetEntitlementsResponseMessage.dmaID;
-
       this.entitlement_access = data.GetEntitlementsResponseMessage.AccountServiceMessage.filter(a =>
         moment(a.validityTill).isAfter(moment()),
       ).map(a => a.ovpSKU);
@@ -727,6 +781,10 @@ class GothamHandler {
 
   private getDeviceIdToken = async (authToken: string): Promise<string> => {
     const secretRes = await this.getSigningSecret(authToken);
+
+    if (!secretRes?.secret || !secretRes?.deviceId) {
+      throw new Error('Missing signing secret or deviceId for Gotham device token');
+    }
 
     const now = moment();
     const secretKey = CryptoJS.enc.Base64.parse(secretRes.secret);
@@ -749,7 +807,7 @@ class GothamHandler {
   };
 
   private getSigningSecret = async (authToken: string): Promise<ISigningRes> => {
-    try {
+    const doRequest = async () => {
       const {data} = await axios.post(
         `${BASE_API_URL}/device/app/register`,
         {
@@ -767,6 +825,30 @@ class GothamHandler {
       );
 
       return data.data;
+    };
+
+    try {
+      let res;
+
+      try {
+        res = await doRequest();
+      } catch (e: any) {
+        const status = e?.response?.status;
+
+        if (status === 401) {
+          console.warn('[Gotham] getSigningSecret 401 — refreshing session and retrying…');
+          await this.refreshGothamSession();
+          res = await doRequest();
+        } else {
+          throw e;
+        }
+      }
+
+      if (!res?.secret || !res?.deviceId) {
+        throw new Error('Gotham signing secret response missing secret or deviceId');
+      }
+
+      return res;
     } catch (e) {
       console.error(e);
       console.log('Could not register device for Gotham');
@@ -819,7 +901,6 @@ class GothamHandler {
       });
 
       const adobeCode = adobeData.code;
-
       const sid = extractSidFromJWT(this.auth_token);
       const hashedSid = Buffer.from(sid).toString('base64');
 
@@ -834,7 +915,7 @@ class GothamHandler {
     try {
       const entitlements = await this.getEntitlements();
 
-      if (!entitlements.AccountServiceMessage.length) {
+      if (!entitlements?.AccountServiceMessage?.length) {
         return false;
       }
 
@@ -899,7 +980,10 @@ class GothamHandler {
 
       if (
         !channel ||
-        _.intersection(this.entitlement_access, channel.id === 'YES' ? YES_PERMISSIONS : MSG_PERMISSIONS).length === 0
+        _.intersection(
+          this.entitlement_access,
+          channel.id === 'YES' ? YES_PERMISSIONS : MSG_PERMISSIONS,
+        ).length === 0
       ) {
         delete channelObj[channelNum];
         continue;
@@ -907,7 +991,6 @@ class GothamHandler {
 
       channel.checkChannelEnabled = async () => {
         const {enabled} = await db.providers.findOneAsync<IProvider>({name: 'gotham'});
-
         return enabled;
       };
     }
@@ -943,7 +1026,13 @@ class GothamHandler {
 
   private getUserMetadata = async (): Promise<IAdobeUserMetadata> => {
     try {
-      const url = [BASE_ADOBE_URL, '/tokens/usermetadata', '?deviceId=', this.device_id, '&requestor=Gotham'].join('');
+      const url = [
+        BASE_ADOBE_URL,
+        '/tokens/usermetadata',
+        '?deviceId=',
+        this.device_id,
+        '&requestor=Gotham',
+      ].join('');
 
       const {data} = await axios.get<{data: IAdobeUserMetadata}>(url, {
         headers: {
@@ -984,7 +1073,10 @@ class GothamHandler {
     }
   };
 
-  private addTVESubscription = async (adobeId: string, adobeUserMeta: IAdobeUserMetadata): Promise<void> => {
+  private addTVESubscription = async (
+    adobeId: string,
+    adobeUserMeta: IAdobeUserMetadata,
+  ): Promise<void> => {
     try {
       await axios.post(
         `${BASE_API_URL}/addTVESubscription`,
@@ -1016,13 +1108,25 @@ class GothamHandler {
   private save = async () => {
     await db.providers.updateAsync(
       {name: 'gotham'},
-      {$set: {tokens: _.omit(this, 'appConfig', 'access_token', 'entitlement_token', 'dma_id', 'entitlement_access')}},
+      {
+        $set: {
+          tokens: _.omit(
+            this,
+            'appConfig',
+            'access_token',
+            'entitlement_token',
+            'dma_id',
+            'entitlement_access',
+          ),
+        },
+      },
     );
   };
 
   private load = async () => {
     const {tokens} = await db.providers.findOneAsync<IProvider<TGothamTokens>>({name: 'gotham'});
-    const {device_id, auth_token, refresh_token, expiresIn, adobe_token_expires, adobe_token} = tokens || {};
+    const {device_id, auth_token, refresh_token, expiresIn, adobe_token_expires, adobe_token} =
+      tokens || {};
 
     this.device_id = device_id;
     this.auth_token = auth_token;
@@ -1034,5 +1138,4 @@ class GothamHandler {
 }
 
 export type TGothamTokens = ClassTypeWithoutMethods<GothamHandler>;
-
 export const gothamHandler = new GothamHandler();
